@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+# a vault's own working files, if someone runs the kit inside this folder
+/_system/
+/kb.config.json
+*.zip
+.DS_Store
+Thumbs.db

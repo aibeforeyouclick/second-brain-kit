@@ -1,0 +1,21 @@
+{
+  "exempt_names": ["README.md"],
+  "enums": {
+    "type": ["note", "index", "project", "concept", "daily", "idea"],
+    "status": ["draft", "active", "done"],
+    "domain": ["work", "personal"]
+  },
+  "required_fields": ["title", "type", "status", "updated"],
+  "required_paths": ["Projects/", "Home.md"],
+  "ignore_links": ["Not Yet Written"],
+  "waiting_marker": "Waiting on",
+  "index_output": "Index.generated.md",
+  "index_scope": "all",
+  "index_group_by": ["type"],
+  "index_frontmatter": {
+    "title": "Generated Index",
+    "type": "index",
+    "status": "active",
+    "summary": "Computed list of notes."
+  }
+}

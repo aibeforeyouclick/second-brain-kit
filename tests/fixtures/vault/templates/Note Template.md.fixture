@@ -1,0 +1,6 @@
+---
+title: "{{title}}"
+type:
+status: draft
+---
+Link placeholder: [[{{link}}]] and [[Template Only Link]].

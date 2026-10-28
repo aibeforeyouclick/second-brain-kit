@@ -1,0 +1,30 @@
+---
+title: Home
+type: index
+status: active
+updated: 2024-05-03
+summary: Entry point of the sample vault.
+tags:
+  - start
+---
+# Home
+
+Start with [[Overview]] or the alpha version [[Projects/Alpha/Overview|Alpha]].
+Read [[Graph Theory#Definitions]] and [[Graph Theory#Missing Heading]].
+The short name [[GT]] is only an alias.
+Meetings live in [[Meeting Notes 2024]] and [[Daily/2024-05-01]]. Also see [[Café Ideas]].
+Embeds: ![[diagram.png]] and ![[Spec Sheet.pdf]].
+Still to write: [[Ghost Note]] and [[Not Yet Written]].
+A [markdown link](Concepts/Graph%20Theory.md) and a [broken one](Concepts/Nope.md).
+
+| Column |
+|---|
+| [[Graph Theory\|GT link]] |
+
+`[[Inline Code]]` is ignored.
+
+```
+[[In Fence]]
+```
+
+%% [[Hidden Comment]] %%

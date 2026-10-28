@@ -1,0 +1,58 @@
+{
+  "_comment": "Copy this file to the root of your vault as kb.config.json and edit it. All paths are relative to the vault root. Keys starting with an underscore are ignored.",
+
+  "exempt_names": ["README.md", "CLAUDE.md", "AGENTS.md"],
+  "_exempt_dirs": "Folders whose notes are not checked for schema, orphans or outgoing links, and are left out of the index. A single folder name (node_modules/) matches at any depth; a longer path (docs/vendor/) matches from the vault root. Put third-party documentation and code here before looking at any number.",
+  "exempt_dirs": [".obsidian/", ".trash/", "templates/", ".git/", "node_modules/", ".venv/", "venv/", "__pycache__/", ".tmp/", "dist/", "build/"],
+
+  "enums": {
+    "type": ["source", "idea", "decision", "project", "meeting", "howto", "lesson", "synthesis", "index"],
+    "status": ["draft", "active", "partial", "done", "archived"],
+    "domain": ["strategy", "architecture", "security", "vendor", "team"],
+    "claim_status": ["verified", "vendor-claim", "unverified", "inference", "mixed"]
+  },
+  "required_fields": ["title", "type", "domain", "status", "updated", "summary"],
+  "date_fields": ["updated", "source_date"],
+
+  "required_paths": [],
+  "ignore_links": [],
+  "resolve_aliases": false,
+  "check_headings": true,
+  "orphan_ok_types": ["source"],
+  "_orphan_ok_types": "Notes of these types are not reported as orphans (leaf notes such as sources, emails, meeting minutes that nothing needs to link to).",
+  "orphans_scope": [],
+  "_orphans_scope": "Paths checked for orphans. Empty = the folders in required_paths if there are any, otherwise the whole vault. Use [\"*\"] to check everything even when required_paths is set. Links from notes outside the scope still count.",
+
+  "secret_scan": true,
+  "secret_scan_extensions": [".md", ".json", ".ps1", ".sh", ".py", ".js", ".ts", ".bat", ".cmd", ".yml", ".yaml", ".env"],
+  "_secret_scan_extensions": "File types the secret scan reads. By default notes, scripts and JSON (the list shown here): a real secret is more likely to sit in a script or a settings file than in a note. Narrow the list to scan less (for example [\".md\"]). .env also covers .env.local and similar. The summary line of kb_lint says how many files of each type were read. Matches inside fenced code blocks of Markdown notes are reported separately as secret-in-example (warning).",
+  "secret_file_patterns": ["*.key", "*.pem", "*.pfx", "*.p12", "*.jks", "*.keystore", "*.ppk", "id_rsa*", ".local_secrets/"],
+  "_secret_file_patterns": "Key files recognized by their extension (or a .local_secrets folder) are reported as secret-file (path only, content not read), hidden folders included. Code, documentation and public-key files are never reported because of their name. All secret checks skip exempt_dirs, secret_scan_exclude and dependency folders (site-packages, node_modules, vendor, venv). An encryption key stored next to the data it protects protects nothing.",
+  "secret_scan_exclude": {
+    "node_modules/": "third-party packages",
+    "venv/": "third-party packages",
+    "dist/": "build output",
+    "build/": "build output"
+  },
+  "_secret_scan_exclude": "Path -> reason. Same matching as exempt_dirs; a reason is mandatory. An exclusion can expire: write {\"path/\": {\"reason\": \"public sign-up token, no permissions\", \"until\": \"YYYY-MM-DD\"}} (or a list of {\"path\", \"reason\", \"until\"} objects). The last day is included; after it the exclusion no longer applies, the findings come back as errors that say \"exclusion expired\", and kb_lint warns about the entry.",
+  "capture_dirs": [],
+  "_capture_dirs": "Folders of logs, exports and archives (same matching as exempt_dirs, for example [\"exports/\", \"logs/\"]). A secret-looking string there is reported as secret-in-capture (warning) instead of an error, because it is captured data nobody wrote as a note; a private-key block stays an error. Large JSON files (over 1 MB, or lines over 5,000 characters) are treated the same way without being listed.",
+
+  "waiting_marker": "Waiting on",
+
+  "index_output": "_system/INDEX.generated.md",
+  "index_title": "Generated index",
+  "index_group_by": ["domain", "type"],
+  "index_columns": ["title", "status", "updated", "summary"],
+  "index_redact": {},
+  "index_scope": "valid",
+  "_index_scope": "Which notes the index lists: valid (default; only notes whose frontmatter passes the schema), required (only notes under required_paths) or all (every note with a frontmatter). Notes left out are counted on the index page; kb_lint --schema lists them.",
+  "index_link_style": "wikilink",
+  "index_frontmatter": {
+    "title": "Generated index",
+    "type": "index",
+    "domain": "strategy",
+    "status": "active",
+    "summary": "Computed list of notes, built by kb_index.py."
+  }
+}

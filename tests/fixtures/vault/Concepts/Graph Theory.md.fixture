@@ -1,0 +1,15 @@
+---
+title: Graph Theory
+type: concept
+status: draft
+updated: 2024-04-02
+summary: Basics.
+aliases:
+  - GT
+  - Graphs
+tags: [math, "graph theory"]
+---
+## Definitions
+Nodes and edges.
+### Paths
+See [[Home]].
