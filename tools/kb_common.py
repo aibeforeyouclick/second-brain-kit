@@ -16,7 +16,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 BOM = chr(0xFEFF)  # byte order mark some editors put at the start of a file
-KIT_VERSION = "1.8"
+KIT_VERSION = "1.8.1"
 CONFIG_NAME = "kb.config.json"
 # Dependency folders: third-party code and its test fixtures. The secret checks never look inside them,
 # whatever exempt_dirs says (a test key inside a package is not your secret).
@@ -45,14 +45,21 @@ DEFAULTS = {
     "index_group_by": ["type"],
     "index_columns": ["title", "path", "status", "updated", "summary"],
     "index_redact": {},
-    "index_link_style": "wikilink",
+    "index_link_style": "auto",
     "index_scope": "valid",
+    "system_dir_exempt": True,
     "index_frontmatter": {},
 }
 LIST_KEYS = {"exempt_names", "exempt_dirs", "required_fields", "required_paths", "ignore_links",
              "date_fields", "index_group_by", "index_columns", "orphans_scope", "secret_scan_extensions",
              "orphan_ok_types", "secret_file_patterns", "capture_dirs"}
-BOOL_KEYS = {"resolve_aliases", "check_headings", "secret_scan"}
+BOOL_KEYS = {"resolve_aliases", "check_headings", "secret_scan", "system_dir_exempt"}
+# Defaults that changed in 1.8: a config file that does not set them gets a one-line "set it explicitly" note from the tool that uses them.
+CHANGED_IN_1_8 = {
+    "index_scope": ("kb_index", "now 'valid': the index lists only notes that pass the schema; before 1.8 it listed every note with a frontmatter",
+                    "valid, required or all"),
+    "secret_scan_extensions": ("kb_lint", "now notes, scripts and JSON; before 1.8 notes only", "for example [\".md\"] to scan notes only"),
+}
 STR_KEYS = {"waiting_marker", "index_output", "index_title", "index_link_style", "index_scope"}
 DICT_OF_LISTS = {"enums", "index_redact"}
 DICT_OF_REASONS = {"secret_scan_exclude"}  # pattern -> why it is excluded (a reason is mandatory)
@@ -63,6 +70,14 @@ SKIP_DIRS = {"node_modules"}  # directories starting with "." are skipped as wel
 
 class ConfigError(Exception):
     pass
+
+
+def default_changed_notes(cfg, tool: str) -> list:
+    """One line per setting whose default changed in 1.8 and that this config file leaves unset, for the named tool."""
+    if not cfg.get("_config_file"):
+        return []
+    return [f"default changed in 1.8: {key} is not set in {CONFIG_NAME} ({why}); set it explicitly ({options})"
+            for key, (owner, why, options) in CHANGED_IN_1_8.items() if owner == tool and key not in cfg.get("_explicit", set())]
 
 
 def normalize_exclusions(key, value):
@@ -97,6 +112,7 @@ def load_config(root, path=None):
     """Return (config, notes). `notes` lists non-fatal remarks (unknown keys, missing file)."""
     cfg = json.loads(json.dumps(DEFAULTS))
     cfg["_explicit"] = set()  # keys that came from the config file, not from the built-in defaults
+    cfg["_config_file"] = False  # True when a config file was read
     cfg["_exclude_until"] = {}  # secret_scan_exclude pattern -> last day (YYYY-MM-DD) the exclusion applies
     notes = []
     cfg_path = Path(path) if path else Path(root) / CONFIG_NAME
@@ -109,6 +125,7 @@ def load_config(root, path=None):
         raise ConfigError(f"cannot read {cfg_path}: {exc}") from exc
     if not isinstance(data, dict):
         raise ConfigError("config must be a JSON object")
+    cfg["_config_file"] = True
     for key, value in data.items():
         if key.startswith("_"):
             continue  # "_comment" style keys
@@ -132,8 +149,8 @@ def load_config(root, path=None):
             raise ConfigError("index_frontmatter must be an object")
         cfg[key] = value
         cfg["_explicit"].add(key)
-    if cfg["index_link_style"] not in ("wikilink", "path"):
-        raise ConfigError("index_link_style must be 'wikilink' or 'path'")
+    if cfg["index_link_style"] not in ("auto", "wikilink", "markdown", "path"):
+        raise ConfigError("index_link_style must be 'auto', 'wikilink' or 'markdown' ('path' is accepted as another name for 'markdown')")
     if cfg["index_scope"] not in INDEX_SCOPES:
         raise ConfigError("index_scope must be 'required', 'valid' or 'all'")
     out = cfg["index_output"].replace("\\", "/")
@@ -546,6 +563,14 @@ class Vault:
                 return pattern, until[pattern], reason
         return None
 
+    def link_style(self) -> str:
+        """'wikilink' or 'markdown'. `auto` (the default) means wikilinks in an Obsidian vault (it has a .obsidian folder) and ordinary
+        relative Markdown links everywhere else."""
+        style = self.cfg["index_link_style"]
+        if style == "auto":
+            return "wikilink" if (self.root / ".obsidian").is_dir() else "markdown"
+        return "markdown" if style == "path" else style
+
     def in_capture_dir(self, rel: str) -> bool:
         """Folders of reports, exports and archives: a secret-looking string there is captured data, not written text."""
         return any(dir_match(d, rel) for d in self.cfg["capture_dirs"])
@@ -558,8 +583,11 @@ class Vault:
         return self.secrets_excluded(rel) or self.in_exempt_dir(rel) or self.in_package_dir(rel)
 
     def is_exempt(self, rel: str) -> bool:
-        """Exempt from schema, orphan and index handling."""
+        """Exempt from schema, orphan and index handling. The kit's own pages in `_system/` (templates, logs, reports) are exempt
+        by default (`system_dir_exempt`): they carry placeholders and are not knowledge."""
         if rel.rsplit("/", 1)[-1].lower() in {n.lower() for n in self.cfg["exempt_names"]}:
+            return True
+        if self.cfg["system_dir_exempt"] and rel.split("/")[0] == "_system":
             return True
         return rel.lower() == self.cfg["index_output"].lower() or self.in_exempt_dir(rel)
 

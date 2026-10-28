@@ -2,6 +2,8 @@
 import hashlib
 import io
 import json
+import re
+import shutil
 import sys
 import tempfile
 import unittest
@@ -1023,17 +1025,17 @@ class EverySecretCheckHonoursTheSameSkipRulesTests(unittest.TestCase):
 class VersionFlagTests(unittest.TestCase):
     def test_every_tool_reports_the_kit_version(self):
         import kb_backup, kb_frontmatter, kb_index
-        self.assertEqual(kb.KIT_VERSION, "1.8")
+        self.assertEqual(kb.KIT_VERSION, "1.8.1")
         for module in (kb_lint, kb_index, kb_frontmatter, kb_backup):
             out = io.StringIO()
             with self.assertRaises(SystemExit) as ctx, redirect_stdout(out):
                 module.main(["--version"])
             self.assertEqual(ctx.exception.code, 0)
-            self.assertEqual(out.getvalue().strip(), "kit 1.8")
+            self.assertEqual(out.getvalue().strip(), "kit 1.8.1")
 
     def test_stats_carry_the_version(self):
         stats = json.loads(StatsAndCliTests.run_cli(None, "--root", str(FIXTURE), "--stats", "--json")[1])["stats"]
-        self.assertEqual(stats["kit_version"], "1.8")
+        self.assertEqual(stats["kit_version"], "1.8.1")
 
 
 class KitDocumentsTests(unittest.TestCase):
@@ -1151,7 +1153,7 @@ class BeforeAfterQueryTestDocsTests(unittest.TestCase):
         self.assertNotIn("estimate is fine", section)
 
     def test_the_kit_version_is_bumped(self):
-        self.assertEqual(kb.KIT_VERSION, "1.8")
+        self.assertEqual(kb.KIT_VERSION, "1.8.1")
 
 
 class QueryStatsDocsTests(unittest.TestCase):
@@ -1185,7 +1187,7 @@ class QueryStatsDocsTests(unittest.TestCase):
     def test_the_tool_is_wired_to_the_same_version_and_privacy_rules_as_the_others(self):
         source = (self.KIT / "tools" / "kb_querystats.py").read_text(encoding="utf-8")
         self.assertIn("never prints what was said", " ".join(source.split()))
-        self.assertEqual(kb.KIT_VERSION, "1.8")
+        self.assertEqual(kb.KIT_VERSION, "1.8.1")
 
 
 FAKE_VALUES = {"@L9@": "get_access_token_interactively_long_name", "@L8@": "get_access_token_interactively_long", "@L1@": "get_access_token_from_login", "@L2@": "ACCESS_TOKEN_NAME", "@L3@": "ConvertTo-SecureString", "@L4@": "Get-AccessTokenInteractive", "@L5@": "Invoke-RestMethod", "@L6@": "fetch_access_token_interactively", "@L7@": "getAccessTokenInteractively", "@L10@": "/var/run/secrets/kubernetes/token",
@@ -1589,7 +1591,7 @@ class Stage4DocsTests(unittest.TestCase):
         self.assertTrue(all(len(r) == len(rows[0]) for r in rows))
 
     def test_version_is_1_8(self):
-        self.assertEqual(kb.KIT_VERSION, "1.8")
+        self.assertEqual(kb.KIT_VERSION, "1.8.1")
 
 
 def run_querystats(*args):
@@ -2027,9 +2029,9 @@ class Stage6DocsTests(unittest.TestCase):
                        "only when answering a question from the notes", "lint only the folders in `required_paths`"):
             self.assertIn(phrase, phase3, phrase)
         early = self.read("BOOTSTRAP-PROMPT.md").split("**Phase 1")[1].split("**Phase 3")[0]
-        self.assertIn("do not write them to any `CLAUDE.md` yet", early)
+        self.assertIn("do not write them to the `CLAUDE.md` at the vault root yet", early)
         self.assertIn("exist only after Phase 3", early)
-        self.assertNotIn("local `CLAUDE.md`", self.read("BOOTSTRAP-PROMPT.md"))
+        self.assertIn("local `CLAUDE.md` inside the pilot folder only", early)
 
     def test_query_test_and_prompt_warn_that_agent_memory_can_leak_answers(self):
         qt = self.read("templates/QUERY-TEST.md").split("## Runs")[0]
@@ -2193,6 +2195,294 @@ class Stage7DocsTests(unittest.TestCase):
             self.assertIn(tool, text, tool)
         for tool in ("kb_lint", "kb_index", "kb_frontmatter", "kb_backup", "kb_querystats", "kb_secure_move"):
             self.assertTrue((self.KIT / "tools" / (tool + ".py")).is_file(), tool)
+
+
+class T18Tests(unittest.TestCase):
+    """v1.8.1: path links that work, _system exempt, quiet-exclusion summary, notes without frontmatter, changed-default notes."""
+
+    def cli(self, root, *args):
+        return StatsAndCliTests.run_cli(None, "--root", str(root), *args)
+
+    def write_config(self, root, **over):
+        cfg = json.loads((root / "kb.config.json").read_text(encoding="utf-8"))
+        cfg.update(over)
+        (root / "kb.config.json").write_text(json.dumps(cfg), encoding="utf-8")
+
+    # --- 1. path links work from the index file's own folder
+    def test_path_style_links_are_relative_markdown_links_that_open_the_notes(self):
+        import kb_index
+        root = fixture_copy()
+        self.write_config(root, index_link_style="markdown", index_output="_system/INDEX.generated.md")
+        (root / "Concepts" / "Odd [name] (1).md").write_text(
+            "---" + chr(10) + "title: Odd [name]" + chr(10) + "type: note" + chr(10) + "status: draft" + chr(10) + "updated: 2024-01-01" + chr(10) + "---" + chr(10), encoding="utf-8")
+        cfg, _ = kb.load_config(root)
+        text = kb_index.build(root, cfg)
+        self.assertNotIn("[[", text)
+        links = re.findall(r"\]\(((?:[^()]|\([^()]*\))*)\)", "\n".join(l for l in text.splitlines() if l.startswith("| [")))
+        self.assertTrue(links)
+        from urllib.parse import unquote
+        for link in links:
+            target = (root / "_system" / unquote(link)).resolve()
+            self.assertTrue(target.is_file(), link)
+        self.assertIn("(../Concepts/Graph%20Theory.md)", text)
+        self.assertIn("[Odd \\[name\\]](../Concepts/Odd%20%5Bname%5D%20(1).md)", text)
+
+    def test_the_default_wikilink_style_is_unchanged(self):
+        import kb_index
+        root = fixture_copy()
+        cfg, _ = kb.load_config(root)
+        self.assertIn("[[Concepts/Graph Theory\\|", kb_index.build(root, cfg))
+
+    # --- 2. _system is not knowledge
+    def test_system_pages_with_placeholders_are_exempt_from_the_schema_and_the_index_by_default(self):
+        import kb_index
+        root = fixture_copy()
+        (root / "_system").mkdir()
+        (root / "_system" / "CONFLICTS.md").write_text(
+            "---" + chr(10) + "title: Conflicts" + chr(10) + "type: index" + chr(10) + "domain: <your-domain>" + chr(10) + "status: active" + chr(10) + "updated: YYYY-MM-DD" + chr(10) + "---" + chr(10) + "body" + chr(10), encoding="utf-8")
+        _, found = lint(root, kb_lint.CHECKS, schema=True)
+        self.assertEqual([f for f in found if f.path.startswith("_system/")], [])
+        cfg, _ = kb.load_config(root)
+        self.assertNotIn("_system/CONFLICTS", kb_index.build(root, cfg))
+        self.write_config(root, system_dir_exempt=False)
+        _, found = lint(root, kb_lint.CHECKS, schema=True)
+        self.assertTrue([f for f in found if f.path == "_system/CONFLICTS.md" and f.check == "schema"])
+
+    def test_system_exemption_is_only_for_the_top_level_system_folder(self):
+        root = fixture_copy()
+        (root / "Projects" / "_system").mkdir()
+        (root / "Projects" / "_system" / "Page.md").write_text("---" + chr(10) + "title: P" + chr(10) + "updated: nope" + chr(10) + "---" + chr(10), encoding="utf-8")
+        _, found = lint(root, ("schema",), schema=True)
+        self.assertTrue([f for f in found if f.path == "Projects/_system/Page.md"])
+
+    def test_the_prompt_and_guide_tell_the_agent_to_fill_the_placeholders_and_to_ask_about_obsidian(self):
+        kit = HERE.parent
+        prompt = (kit / "BOOTSTRAP-PROMPT.md").read_text(encoding="utf-8")
+        self.assertIn("system_dir_exempt", (kit / "kb.config.example.json").read_text(encoding="utf-8"))
+        phase1 = prompt.split("**Phase 1")[1].split("**Phase 2")[0]
+        phase3 = prompt.split("**Phase 3")[1].split("**Phase 4")[0]
+        for text in (phase1, phase3):
+            self.assertIn("every placeholder", text)
+        phase0 = prompt.split("**Phase 0")[1].split("**Phase 1")[0]
+        for phrase in ("Do you use Obsidian", "index_link_style", "\"markdown\""):
+            self.assertIn(phrase, phase0, phrase)
+
+    # --- 5. quiet exclusions are counted in the summary
+    def test_the_summary_counts_excluded_files_and_ignored_links(self):
+        root = fixture_copy()
+        (root / "dump").mkdir()
+        (root / "dump" / "a.md").write_text("x", encoding="utf-8")
+        (root / "dump" / "b.md").write_text("x", encoding="utf-8")
+        self.write_config(root, secret_scan_exclude={"dump/": "exports"})
+        code, out, _ = self.cli(root)
+        self.assertIn("2 files excluded from secret scan", out)
+        self.assertRegex(out, r"\d+ links ignored \(see kb\.config\.json\)")
+        stats = json.loads(self.cli(root, "--stats", "--json")[1])["stats"]
+        self.assertEqual(stats["secret_scan_excluded_files"], 2)
+        self.assertGreaterEqual(stats["links_ignored"], 1)
+
+    def test_nothing_is_said_when_nothing_is_excluded_or_ignored(self):
+        root = fixture_copy()
+        self.write_config(root, ignore_links=[], secret_scan_exclude={})
+        out = self.cli(root, "--checks", "secrets")[1]
+        self.assertNotIn("excluded from secret scan", out)
+        self.assertNotIn("links ignored", out)
+
+    # --- 6. the index says how many notes have no frontmatter at all
+    def test_the_index_counts_notes_without_frontmatter(self):
+        import kb_index
+        root = fixture_copy()
+        (root / "Loose.md").write_text("no frontmatter here" + chr(10), encoding="utf-8")
+        (root / "Loose2.md").write_text("none either" + chr(10), encoding="utf-8")
+        cfg, _ = kb.load_config(root)
+        text = kb_index.build(root, cfg)
+        self.assertRegex(text, r"Notes without frontmatter \(not in this index\): \d+")
+        shown = int(re.search(r"Notes without frontmatter \(not in this index\): (\d+)", text).group(1))
+        self.assertGreaterEqual(shown, 2)
+        # a vault whose notes all have frontmatter says nothing
+        for p in list(root.rglob("*.md")):
+            if "---" not in p.read_text(encoding="utf-8")[:4] and not kb.Vault(root, cfg).is_exempt(p.relative_to(root).as_posix()):
+                p.write_text("---" + chr(10) + "title: t" + chr(10) + "type: note" + chr(10) + "status: draft" + chr(10) + "updated: 2024-01-01" + chr(10) + "---" + chr(10), encoding="utf-8")
+        self.assertNotIn("Notes without frontmatter", kb_index.build(root, cfg))
+
+    # --- 7. defaults that changed
+    def test_a_config_that_does_not_set_the_changed_defaults_gets_a_note_from_the_tool_that_uses_them(self):
+        import kb_index
+        root = fixture_copy()
+        cfg = json.loads((root / "kb.config.json").read_text(encoding="utf-8"))
+        cfg.pop("index_scope", None)
+        cfg.pop("secret_scan_extensions", None)
+        (root / "kb.config.json").write_text(json.dumps(cfg), encoding="utf-8")
+        err = io.StringIO()
+        with redirect_stdout(io.StringIO()), redirect_stderr(err):
+            kb_index.main(["--root", str(root)])
+        self.assertIn("note: default changed in 1.8: index_scope is not set in kb.config.json", err.getvalue())
+        self.assertNotIn("secret_scan_extensions", err.getvalue())
+        code, out, lint_err = self.cli(root)
+        self.assertIn("default changed in 1.8: secret_scan_extensions is not set in kb.config.json", lint_err)
+        self.assertNotIn("index_scope", lint_err)
+        self.assertIn("set it explicitly", lint_err)
+
+    def test_no_note_when_the_keys_are_set_when_there_is_no_config_file_or_the_scan_is_off(self):
+        import kb_index
+        root = fixture_copy()
+        self.write_config(root, index_scope="all", secret_scan_extensions=[".md"])
+        self.assertEqual(self.cli(root)[2], "")
+        err = io.StringIO()
+        with redirect_stdout(io.StringIO()), redirect_stderr(err):
+            kb_index.main(["--root", str(root)])
+        self.assertEqual(err.getvalue(), "")
+        empty = Path(tempfile.mkdtemp(prefix="kbn-"))
+        (empty / "A.md").write_text("x", encoding="utf-8")
+        self.assertNotIn("default changed", self.cli(empty)[2])
+        cfg = json.loads((root / "kb.config.json").read_text(encoding="utf-8"))
+        cfg.pop("secret_scan_extensions")
+        cfg["secret_scan"] = False
+        (root / "kb.config.json").write_text(json.dumps(cfg), encoding="utf-8")
+        self.assertNotIn("default changed", self.cli(root)[2])
+
+    def test_the_kit_version_is_1_8_1_in_every_tool(self):
+        self.assertEqual(kb.KIT_VERSION, "1.8.1")
+
+
+class T18ColleagueReportTests(unittest.TestCase):
+    KIT = HERE.parent
+
+    def read(self, rel):
+        return (self.KIT / rel).read_text(encoding="utf-8")
+
+    def cli(self, root, *args):
+        return StatsAndCliTests.run_cli(None, "--root", str(root), *args)
+
+    def test_the_generated_index_is_not_counted_as_a_place_where_something_waits(self):
+        root = fixture_copy()
+        (root / "Note W.md").write_text("---" + chr(10) + "title: W" + chr(10) + "type: note" + chr(10) + "status: draft" + chr(10) + "updated: 2024-01-01" + chr(10)
+                                        + "summary: Waiting on the vendor" + chr(10) + "---" + chr(10) + "Waiting on the vendor" + chr(10), encoding="utf-8")
+        cfg = json.loads((root / "kb.config.json").read_text(encoding="utf-8"))
+        cfg["index_columns"] = ["title", "summary"]
+        (root / "kb.config.json").write_text(json.dumps(cfg), encoding="utf-8")
+        import kb_index
+        with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+            kb_index.main(["--root", str(root), "--write"])
+        self.assertIn("Waiting on the vendor", (root / "Index.generated.md").read_text(encoding="utf-8"))
+        stats = json.loads(self.cli(root, "--stats", "--json")[1])["stats"]
+        self.assertNotIn("Index.generated.md", stats["waiting_marker_by_note"])
+        self.assertEqual(stats["waiting_marker_by_note"]["Note W.md"], 2)
+
+    def test_the_summary_says_when_orphans_are_checked_only_in_part_of_the_vault(self):
+        root = fixture_copy()
+        out = self.cli(root)[1]
+        self.assertIn("orphans checked only in Projects/, Home.md", out)
+        stats = json.loads(self.cli(root, "--stats", "--json")[1])["stats"]
+        self.assertEqual(stats["orphans_checked_in"], ["Projects/", "Home.md"])
+        cfg = json.loads((root / "kb.config.json").read_text(encoding="utf-8"))
+        cfg["orphans_scope"] = ["*"]
+        (root / "kb.config.json").write_text(json.dumps(cfg), encoding="utf-8")
+        self.assertNotIn("orphans checked only", self.cli(root)[1])
+
+    def test_entries_that_ship_with_the_example_config_do_not_warn_but_your_own_do(self):
+        root = fixture_copy()
+        example = json.loads(self.read("kb.config.example.json"))
+        cfg = {k: example[k] for k in ("exempt_names", "exempt_dirs", "secret_scan_exclude")}
+        (root / "kb.config.json").write_text(json.dumps(cfg), encoding="utf-8")
+        _, found = lint(root, kb_lint.CHECKS)
+        self.assertEqual([f.message for f in found if f.check == "config"], [])
+        cfg["exempt_dirs"] = cfg["exempt_dirs"] + ["my-typo/"]
+        (root / "kb.config.json").write_text(json.dumps(cfg), encoding="utf-8")
+        _, found = lint(root, kb_lint.CHECKS)
+        self.assertEqual([f.message for f in found if f.check == "config"], ["exempt_dirs entry matches nothing: my-typo/"])
+
+    def test_the_shipped_entries_are_exactly_the_ones_in_the_example_config(self):
+        example = json.loads(self.read("kb.config.example.json"))
+        for key, shipped in kb_lint.SHIPPED_ENTRIES.items():
+            self.assertEqual(shipped, set(example[key]), key)
+
+    def test_the_prompt_names_the_pilot_commands_and_the_cleanliness_rule(self):
+        prompt = self.read("BOOTSTRAP-PROMPT.md")
+        phase2 = prompt.split("**Phase 2 ")[1].split("**Phase 2b")[0]
+        for phrase in ("kb_frontmatter.py --map <file> --write", "--merge", "kb_backup.py --verify", "**0 errors** in the pilot folder", "add `source:<that note's path>` to `ignore_links`",
+                       "write the reason in the install log", "ask me whether I want the body corrected"):
+            self.assertIn(phrase, phase2, phrase)
+        phase1 = prompt.split("**Phase 1")[1].split("**Phase 2")[0]
+        self.assertIn("`index_frontmatter.domain`", phase1)
+        phase3 = prompt.split("**Phase 3")[1].split("**Phase 4")[0]
+        for phrase in ("narrows the orphan check", "not a fix", "orphans_scope"):
+            self.assertIn(phrase, phase3, phrase)
+        phase0 = prompt.split("**Phase 0")[1].split("**Phase 1")[0]
+        for phrase in ("leave out any `__pycache__` folder", "YYYY-MM-DD", "inside the table under \"Log\""):
+            self.assertIn(phrase, phase0, phrase)
+
+    def test_the_guide_opening_no_longer_says_obsidian_stays_the_viewer(self):
+        guide = self.read("GUIDE.md")
+        self.assertNotIn("Obsidian stays the viewer and editor. The kit adds", guide)
+        self.assertNotIn("two small tools", guide)
+        self.assertIn("works with or without Obsidian", guide)
+        section = guide.split("## Installing without Obsidian")[1].split("## ")[0]
+        for phrase in ("index_link_style", "relative Markdown link", "VS Code", "GitHub", "`_system/`", "system_dir_exempt"):
+            self.assertIn(phrase, section, phrase)
+
+    def test_the_tools_readme_has_no_stale_both_and_explains_the_quiet_settings(self):
+        text = self.read("tools/README.md")
+        self.assertNotIn("Both read", text)
+        for phrase in ("Every tool reads `kb.config.json`", "orphans checked only in", "not a fix", "First-run warnings", "Skipped test", "symbolic link",
+                       "files excluded from secret scan", "links ignored", "default changed in 1.8", "Pages under `_system/`", "system_dir_exempt"):
+            self.assertIn(phrase, text, phrase)
+
+    def test_agent_rules_have_a_pilot_version_note(self):
+        rules = self.read("templates/AGENT-RULES.md")
+        for phrase in ("PILOT VERSION", "local CLAUDE.md inside the pilot folder", "do not exist until Phase 3"):
+            self.assertIn(phrase, rules, phrase)
+
+
+class LinkStyleTests(unittest.TestCase):
+    def build(self, root, **cfg_over):
+        import kb_index
+        cfg, _ = kb.load_config(root)
+        cfg.update(cfg_over)
+        return kb_index.build(root, cfg)
+
+    def plain_root(self):
+        root = fixture_copy()
+        shutil.rmtree(root / ".obsidian", ignore_errors=True)
+        cfg = json.loads((root / "kb.config.json").read_text(encoding="utf-8"))
+        cfg.pop("index_link_style", None)
+        (root / "kb.config.json").write_text(json.dumps(cfg), encoding="utf-8")
+        return root
+
+    def test_the_default_is_auto(self):
+        self.assertEqual(kb.load_config(Path(tempfile.mkdtemp(prefix="kbl-")))[0]["index_link_style"], "auto")
+
+    def test_auto_gives_wikilinks_in_an_obsidian_vault_and_markdown_links_elsewhere(self):
+        obsidian = fixture_copy()
+        self.assertTrue((obsidian / ".obsidian").is_dir())
+        self.assertIn("[[Concepts/Graph Theory\\|", self.build(obsidian))
+        plain = self.plain_root()
+        text = self.build(plain)
+        self.assertNotIn("[[", text)
+        self.assertIn("[Graph Theory](Concepts/Graph%20Theory.md)", text)
+
+    def test_explicit_values_win_and_path_is_another_name_for_markdown(self):
+        plain = self.plain_root()
+        self.assertIn("[[Concepts/Graph Theory\\|", self.build(plain, index_link_style="wikilink"))
+        self.assertEqual(self.build(plain, index_link_style="markdown"), self.build(plain, index_link_style="path"))
+        obsidian = fixture_copy()
+        self.assertIn("[Graph Theory](Concepts/Graph%20Theory.md)", self.build(obsidian, index_link_style="markdown"))
+
+    def test_the_pipe_in_a_title_cannot_break_the_table_row(self):
+        plain = self.plain_root()
+        (plain / "Pipe Note.md").write_text(
+            "---" + chr(10) + "title: A | B" + chr(10) + "type: note" + chr(10) + "status: draft" + chr(10) + "updated: 2024-01-01" + chr(10) + "---" + chr(10), encoding="utf-8")
+        text = self.build(plain)
+        row = next(l for l in text.splitlines() if "Pipe%20Note.md" in l)
+        self.assertIn("[A \\| B](Pipe%20Note.md)", row)
+        columns = len([c for c in text.splitlines() if c.startswith("| title")][0].strip("|").split("|"))
+        self.assertEqual(len(re.split(r"(?<!\\)\|", row.strip().strip("|"))), columns)
+
+    def test_a_bad_value_is_refused(self):
+        root = fixture_copy()
+        (root / "kb.config.json").write_text('{"index_link_style": "html"}', encoding="utf-8")
+        with self.assertRaises(kb.ConfigError):
+            kb.load_config(root)
 
 
 class DefaultsAndRuntimeTests(unittest.TestCase):

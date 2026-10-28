@@ -230,6 +230,13 @@ def check_links(vault: kb.Vault, need_inbound: bool = True):
     return [f for f in findings if vault.in_scope(f.path)], inbound, ignored
 
 
+SHIPPED_ENTRIES = {
+    "exempt_names": {"README.md", "CLAUDE.md", "AGENTS.md"},
+    "exempt_dirs": {".obsidian/", ".trash/", "templates/", ".git/", "node_modules/", ".venv/", "venv/", "__pycache__/", ".tmp/", "dist/", "build/"},
+    "secret_scan_exclude": {"node_modules/", "venv/", "dist/", "build/"},
+}
+
+
 def orphan_scope(vault: kb.Vault):
     """Patterns that limit the orphan check: orphans_scope, else required_paths, else the whole vault."""
     return vault.cfg["orphans_scope"] or vault.cfg["required_paths"] or ["*"]
@@ -324,6 +331,15 @@ def secret_name_match(pattern: str, rel: str, name: str) -> bool:
     return fnmatch.fnmatch(name.lower(), pattern.lower())
 
 
+def secret_excluded_files(vault: kb.Vault) -> int:
+    """Files that secret_scan_exclude keeps out of every secret check."""
+    return sum(1 for rel in vault.files + vault.dotenv_files if vault.in_scope(rel) and vault.secrets_excluded(rel))
+
+
+def links_ignored(vault: kb.Vault) -> int:
+    return sum(getattr(vault, "ignore_used", {}).values())
+
+
 def dependency_files_skipped(vault: kb.Vault) -> int:
     """Files the tool can see inside dependency folders, which the secret checks leave out."""
     return sum(1 for rel in vault.files if vault.in_package_dir(rel) and vault.in_scope(rel))
@@ -406,6 +422,8 @@ def waiting_counts(vault: kb.Vault):
     if not marker:
         return counts
     for rel in pool(vault):
+        if rel.lower() == vault.cfg["index_output"].lower():
+            continue  # the generated index repeats summaries; counting it would count one waiting item twice
         n = sum(1 for line in kb.mask(vault.text(rel)).split("\n") if marker in line.lower())
         if n:
             counts[rel] = n
@@ -429,6 +447,9 @@ def compute_stats(vault: kb.Vault, findings, ignored=0):
         "links_ignored": ignored,
         "cloud_only_skipped": len(vault.cloud_only),
         "secret_scan_skipped_dependency_files": dependency_files_skipped(vault),
+        "orphans_checked_in": orphan_scope(vault),
+        "secret_scan_excluded_files": secret_excluded_files(vault) if vault.cfg["secret_scan"] else 0,
+        "links_ignored": links_ignored(vault),
         "scripts_not_scanned": scripts_not_scanned(vault) if vault.cfg["secret_scan"] else 0,
         "secret_scan_skipped_oversize_files": len(getattr(vault, "secret_oversize", [])),
         "kit_version": kb.KIT_VERSION,
@@ -459,6 +480,8 @@ def check_config(vault: kb.Vault, links_checked: bool):
         if key not in explicit:
             return
         for entry in entries:
+            if entry in SHIPPED_ENTRIES.get(key, ()):
+                continue  # a default that came with kb.config.example.json: not a mistake of yours, so no warning until you add your own
             if not invisible(entry) and not matches(entry):
                 findings.append(Finding("config", "warning", kb.CONFIG_NAME, 1, f"{key} entry matches nothing: {entry}"))
 
@@ -598,7 +621,7 @@ def main(argv=None) -> int:
     except kb.ConfigError as exc:
         print(f"config error: {exc}", file=sys.stderr)
         return 2
-    for note in notes:
+    for note in notes + (kb.default_changed_notes(cfg, "kb_lint") if cfg["secret_scan"] else []):
         print(f"note: {note}", file=sys.stderr)
     try:
         vault, findings = run(root, cfg, checks, args.schema, args.path)
@@ -651,10 +674,19 @@ def main(argv=None) -> int:
             extra += f"; secret checks skipped {dependency_files_skipped(vault)} files in dependency folders"
         if cfg["secret_scan"] and "secrets" in checks and scripts_not_scanned(vault):
             extra += f"; scripts not scanned ({scripts_not_scanned(vault)} script files found; see secret_scan_extensions)"
+        quiet = []
+        if cfg["secret_scan"] and "secrets" in checks and secret_excluded_files(vault):
+            quiet.append(f"{secret_excluded_files(vault)} files excluded from secret scan")
+        if "links" in checks and links_ignored(vault):
+            quiet.append(f"{links_ignored(vault)} links ignored")
+        if quiet:
+            extra += "; " + ", ".join(quiet) + f" (see {kb.CONFIG_NAME})"
         if getattr(vault, "secret_oversize", None):
             extra += f"; secret scan skipped {len(vault.secret_oversize)} files over {MAX_SCAN_BYTES // 1_000_000} MB"
         if orphans_left_out:
             extra += "; orphans not checked (add --checks to include them)"
+        elif "orphans" in checks and orphan_scope(vault) != ["*"]:
+            extra += "; orphans checked only in " + ", ".join(orphan_scope(vault)) + " (orphans_scope or required_paths)"
         if vault.cloud_only:
             extra += f"; skipped {len(vault.cloud_only)} cloud-only files (not downloaded)"
         print(f"kb_lint: {len(vault.notes)} notes, {len(findings)} findings "

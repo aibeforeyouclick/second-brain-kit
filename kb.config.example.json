@@ -2,6 +2,7 @@
   "_comment": "Copy this file to the root of your vault as kb.config.json and edit it. All paths are relative to the vault root. Keys starting with an underscore are ignored.",
 
   "exempt_names": ["README.md", "CLAUDE.md", "AGENTS.md"],
+  "_shipped_entries": "The entries in exempt_names, exempt_dirs and secret_scan_exclude below are defaults: kb_lint does not warn when they match nothing in your vault. templates/ is exempt because Obsidian template folders hold placeholders; remove it if your templates folder holds real notes.",
   "_exempt_dirs": "Folders whose notes are not checked for schema, orphans or outgoing links, and are left out of the index. A single folder name (node_modules/) matches at any depth; a longer path (docs/vendor/) matches from the vault root. Put third-party documentation and code here before looking at any number.",
   "exempt_dirs": [".obsidian/", ".trash/", "templates/", ".git/", "node_modules/", ".venv/", "venv/", "__pycache__/", ".tmp/", "dist/", "build/"],
 
@@ -46,8 +47,11 @@
   "index_columns": ["title", "status", "updated", "summary"],
   "index_redact": {},
   "index_scope": "valid",
+  "_index_link_style": "auto (default): wikilinks when the vault has a .obsidian folder, ordinary relative Markdown links otherwise. wikilink = [[Folder/Note|Title]] (Obsidian only). markdown = [Title](Folder/Note%20Name.md), relative to the index file, opens in VS Code, GitHub and any viewer (path is an older name for it).",
   "_index_scope": "Which notes the index lists: valid (default; only notes whose frontmatter passes the schema), required (only notes under required_paths) or all (every note with a frontmatter). Notes left out are counted on the index page; kb_lint --schema lists them.",
-  "index_link_style": "wikilink",
+  "system_dir_exempt": true,
+  "_system_dir_exempt": "Pages in the top-level _system/ folder (templates, install logs, reports) carry placeholders and are not knowledge: exempt from the schema check, orphans and the index. Set false to treat them like other notes.",
+  "index_link_style": "auto",
   "index_frontmatter": {
     "title": "Generated index",
     "type": "index",

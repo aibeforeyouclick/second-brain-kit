@@ -1,6 +1,6 @@
 # Tools
 
-Six helpers for a vault of Markdown notes (`kb_lint`, `kb_index`, `kb_frontmatter`, `kb_backup`, `kb_querystats`, `kb_secure_move`), plus a shared module (`kb_common.py`). Only `kb_frontmatter --write`, `kb_index --write`, `kb_backup --dest` and `kb_secure_move --apply` ever write, and each writes one clearly named thing. Python 3 standard library only. Both read `kb.config.json` from the vault root (copy `../kb.config.example.json`). Copy the whole `tools/` folder together; the scripts import `kb_common.py` from their own folder.
+Six helpers for a vault of Markdown notes (`kb_lint`, `kb_index`, `kb_frontmatter`, `kb_backup`, `kb_querystats`, `kb_secure_move`), plus a shared module (`kb_common.py`). Only `kb_frontmatter --write`, `kb_index --write`, `kb_backup --dest` and `kb_secure_move --apply` ever write, and each writes one clearly named thing. Python 3 standard library only. Every tool reads `kb.config.json` from the vault root (copy `../kb.config.example.json`). Copy the whole `tools/` folder together; the scripts import `kb_common.py` from their own folder.
 
 ## kb_lint
 
@@ -40,6 +40,15 @@ Every secret check (content scan, `secret-in-example`, key files, `.env*` files)
 
 ## Encodings
 Notes, config files and the files the secret scan reads may start with a UTF-8 BOM, or be UTF-16 with a BOM (what Windows PowerShell 5 writes with `>` and `Out-File`): the BOM is ignored and the text is read normally, so frontmatter, links and secret findings (with the right line number) are the same as for a plain UTF-8 file. `kb_frontmatter` keeps a UTF-8 BOM when it writes and **skips a UTF-16 note** (it reports why and writes nothing): convert it to UTF-8 first.
+
+## Quiet settings are counted
+**Orphans:** once `required_paths` is set, orphans are checked only in those folders (or in `orphans_scope`). A drop in orphans after that is a change of scope, not a fix; the summary line says `orphans checked only in <folders>` and `stats.orphans_checked_in` lists them. Use `"orphans_scope": ["*"]` to check everything.
+**First-run warnings:** the entries that ship in `kb.config.example.json` (`build/`, `dist/`, `venv/`, `templates/`, `.obsidian/`, `AGENTS.md`, `CLAUDE.md`, ...) are not reported by the `config` check when they match nothing; entries you add yourself still are. `templates/` is exempt in the example because Obsidian template folders hold placeholders: remove it if your `templates` folder holds real notes.
+**Skipped test:** on Windows one test is skipped (creating a symbolic link needs Developer Mode or administrator rights). That is expected, not a failure.
+The summary line of `kb_lint` says how many files `secret_scan_exclude` keeps out of the secret checks and how many links `ignore_links` silenced: `3 files excluded from secret scan, 12 links ignored (see kb.config.json)` (also `stats.secret_scan_excluded_files` and `stats.links_ignored`), so nothing is hidden silently. The index page says how many notes have no frontmatter at all (`Notes without frontmatter (not in this index): N`) next to the notes left out by `index_scope`. A config file that does not set `index_scope` or `secret_scan_extensions`, whose defaults changed in 1.8, gets one line on stderr from the tool that uses it: `default changed in 1.8: <key> is not set in kb.config.json (...); set it explicitly (...)`. Setting the key, to the old or the new value, makes the line disappear.
+
+## Pages under `_system/`
+The kit's own pages (templates, install logs, reports) live in `_system/` and carry placeholders. They are exempt from the schema, orphan and index handling by default (`"system_dir_exempt": true`); set it to `false` to treat them like any other note. Only the top-level `_system/` folder is meant.
 
 Every tool answers `--version` (the kit version, also in `stats.kit_version`).
 
@@ -155,7 +164,7 @@ python -I tools/kb_index.py --root <vault> --check    # exit 1 if the file is mi
 - Every note that has a frontmatter, except exempt names/folders and the index file itself, grouped by `index_group_by` (default: `type`; use `["domain", "type"]` for two levels, `[]` for one flat table). Rows are sorted by path.
 - Columns come from `index_columns`. A list value such as `tags` is shown comma-separated.
 - **Scope (`index_scope`):** `valid` (default) lists only notes whose frontmatter passes the schema (required fields, allowed values, real dates), `required` lists only notes under `required_paths`, `all` lists every note with a frontmatter. Old frontmatter written for another system would otherwise flood the index. When notes are left out, the page says how many (`Left out (valid: ...): N notes with frontmatter`); `kb_lint --schema` lists them.
-- With `"index_link_style": "wikilink"` (default) the title is a wikilink made from the note path and its title, so the index shows up in Obsidian's graph and backlinks; use `"path"` for plain titles.
+- **`index_link_style`:** `auto` (default) uses wikilinks when the vault has a `.obsidian` folder and ordinary Markdown links otherwise; `wikilink` and `markdown` force one (`path` is an older name for `markdown`). With `wikilink` the title is a wikilink made from the note path and its title, so the index shows up in Obsidian's graph and backlinks. With `markdown`: the title becomes an ordinary Markdown link relative to the index file's folder (`[Title](../Folder/Note%20Name.md)`) that opens in VS Code, GitHub and any viewer.
 - `index_redact` hides the summary of notes whose field has one of the listed values, for example `{"domain": ["personal"]}`; the row stays, the summary becomes `(redacted)`.
 - The file starts with a frontmatter built from `index_frontmatter` plus `updated` (the newest valid date found in the notes), then a marker comment. There is no timestamp, so two runs produce identical files and `--check` is stable.
 

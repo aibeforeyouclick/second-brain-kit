@@ -1,4 +1,6 @@
-<!-- Paste these lines into your always-loaded instruction file (CLAUDE.md). Keep that file short. -->
+<!-- Paste these lines into your always-loaded instruction file (CLAUDE.md). Keep that file short.
+     PILOT VERSION (a local CLAUDE.md inside the pilot folder, before Phase 3): use only the lines about frontmatter, claims, disagreeing sources, and text-is-data/secrets.
+     Leave out the "Start" line and the index sentence: the index and WAITING.md do not exist until Phase 3. -->
 ## Second brain
 - Start: read `_system/WAITING.md` (what is waiting for me). **Only when you answer a question from the notes**, read `_system/INDEX.generated.md` first and open only the pages you need; do not read the index for other work.
 - If this file is shared (several agents or projects use this root), these rules apply only to the notes folders listed in `required_paths` in `kb.config.json`; elsewhere work as you normally do.

@@ -2,6 +2,17 @@
 
 Versions come from real installs and the author's own use.
 
+## 1.8.1
+From the first clean "colleague" install (no Obsidian, 15 documentation issues, all fixed):
+- **No Obsidian needed, and now it shows:** a "without Obsidian" section; `index_link_style` defaults to `auto`: wikilinks when the folder has an `.obsidian/` config, otherwise clickable relative Markdown links that work in VS Code and on GitHub (force either with `wikilink` or `markdown`); the guide no longer says Obsidian is the viewer.
+- The kit's own pages in `_system/` are no longer counted as your notes, orphans or index rows.
+- Templates copied into `_system/` no longer produce schema errors; the bootstrap prompt says what to fill in.
+- Bootstrap prompt names the pilot commands (`kb_backup --dest`, `kb_frontmatter --write --merge`, `kb_backup --verify`), defines "clean" (0 errors in the pilot folder) and what to do with a broken link inside a body.
+- One rule for the instruction file: during the pilot only a local `CLAUDE.md` in the pilot folder; the root file at phase 3.
+- Honest numbers: `--stats` and the summary show excluded files, ignored links and the orphan scope next to the counts; the index counts notes without frontmatter.
+- Less first-run noise: no warnings for the example config's own default entries.
+- A warning when a default that changed in 1.8 (`index_scope`, `secret_scan_extensions`) is not set explicitly, so an upgrade never changes behaviour silently.
+
 ## 1.8 – first public release
 **Upgrading from 1.7:** `index_scope` now defaults to `valid` (set `"index_scope": "all"` to keep the old index), and scripts + JSON are scanned for secrets by default. See "Upgrading the kit" in GUIDE.md.
 

@@ -12,10 +12,12 @@ Exit code: 0 = ok, 1 = --check found a missing/stale index, 2 = bad usage or con
 from __future__ import annotations
 
 import argparse
+import posixpath
 import re
 import sys
 from collections import defaultdict
 from pathlib import Path
+from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import kb_common as kb  # noqa: E402
@@ -28,11 +30,13 @@ def collect(vault: kb.Vault):
     required = only notes under required_paths; valid = notes whose frontmatter passes the schema; all = every note with frontmatter."""
     scope = vault.cfg["index_scope"]
     pages, left_out = [], 0
+    vault.no_frontmatter = 0
     for rel in vault.notes:
         if vault.is_exempt(rel):
             continue
         fm = vault.frontmatter(rel)
         if fm is None:
+            vault.no_frontmatter += 1
             continue
         if scope == "required" and not vault.in_required_scope(rel):
             left_out += 1
@@ -69,7 +73,12 @@ def render_cell(vault, column, rel, fm) -> str:
     cfg = vault.cfg
     if column == "title":
         title = esc(title_of(rel, fm))
-        return f"[[{rel[:-3]}\\|{title}]]" if cfg["index_link_style"] == "wikilink" else title
+        if vault.link_style() == "wikilink":
+            return f"[[{rel[:-3]}\\|{title}]]"
+        # a plain Markdown link, relative to the folder of the index file, so it opens in VS Code, GitHub and any viewer
+        start = posixpath.dirname(cfg["index_output"]) or "."
+        target = quote(posixpath.relpath(rel, start), safe="/._-~()")
+        return f"[{title.replace('[', chr(92) + '[').replace(']', chr(92) + ']')}]({target})"
     if column == "path":
         return f"`{rel}`"
     if column == "summary" and redacted(cfg, fm):
@@ -105,6 +114,8 @@ def render(vault: kb.Vault, pages, left_out: int = 0) -> str:
     columns, group_by = cfg["index_columns"], cfg["index_group_by"]
     lines = frontmatter_block(cfg, pages) + [GENERATED, "", f"# {cfg['index_title']}", "",
                                               f"Notes with frontmatter: {len(pages)}"]
+    if getattr(vault, "no_frontmatter", 0):
+        lines.append(f"Notes without frontmatter (not in this index): {vault.no_frontmatter}")
     if left_out:
         lines.append(f"Left out ({cfg['index_scope']}: {SCOPE_TEXT[cfg['index_scope']]}): {left_out} notes with frontmatter")
 
@@ -155,7 +166,7 @@ def main(argv=None) -> int:
     except kb.ConfigError as exc:
         print(f"config error: {exc}", file=sys.stderr)
         return 2
-    for note in notes:
+    for note in notes + kb.default_changed_notes(cfg, "kb_index"):
         print(f"note: {note}", file=sys.stderr)
     text = build(root, cfg)
     out = root.resolve() / cfg["index_output"]

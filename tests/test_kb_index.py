@@ -122,7 +122,7 @@ class ConfigurableOutputTests(unittest.TestCase):
         set_config(root, index_link_style="path")
         out = run(root)[1]
         self.assertNotIn("[[", out)
-        self.assertIn("| Graph Theory | `Concepts/Graph Theory.md` |", out)
+        self.assertIn("| [Graph Theory](Concepts/Graph%20Theory.md) | `Concepts/Graph Theory.md` |", out)
 
     def test_custom_title_and_columns_and_pipes_in_cells(self):
         root = fixture_copy()
