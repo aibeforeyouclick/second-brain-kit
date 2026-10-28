@@ -143,6 +143,10 @@ Upgrading means replacing the tools folder. Your `kb.config.json` and your notes
 6. **Check the vault:** `kb_lint.py --stats` again and compare with the baseline (numbers should change only where the release says they should, for example fewer false secret findings), and `kb_index.py --check`.
 7. **Log it** in the install log: the time from the clock, old and new version, and the result. If anything looks wrong, put the backed-up `_system/tools` back.
 
+**Behaviour changes when you upgrade to 1.8** (check them before rebuilding the index):
+- `index_scope` now defaults to `valid`: the index lists only notes that pass your schema. Notes with an older field structure drop out of the index (not out of the vault). To keep the 1.7 behaviour, add `"index_scope": "all"` to `kb.config.json`, or migrate those notes first. Run `kb_index.py` without `--write` to see the difference.
+- The secret scan now reads scripts and JSON by default, not only notes. Expect new findings; captured log exports are reported apart as `secret-in-capture`.
+
 ## Safety
 - The tools are Python standard library only and make no network calls. They change nothing unless you ask: the index writes only its own output file (`--write`), `kb_backup` writes only an archive outside the vault, and `kb_frontmatter --write` adds frontmatter and proves, note by note, that no body byte changed (otherwise it restores the original).
 - The linter reports where a secret-looking string is, never its value. Key files are recognized by their extension (`.key`, `.pem`, `.pfx`, `.p12`, `.jks`, `.keystore`, `.ppk`, `id_rsa*`), never opened, and never reported just because a code or documentation file has the word "secret" in its name.
