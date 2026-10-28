@@ -427,7 +427,11 @@ def main(argv=None) -> int:
         return 2
     only_under = None
     if args.only_under:
-        only_under = normalize(str(Path(args.only_under).resolve()), None).lower().rstrip("/") + "/"
+        raw = args.only_under
+        # a session may come from another OS: keep Windows (C:/...) and POSIX (/...) absolute paths as written
+        if not re.match(r"^([A-Za-z]:[\/]|/)", raw):
+            raw = str(Path(raw).resolve())
+        only_under = normalize(raw, None).lower().rstrip("/") + "/"
     try:
         turns, notes, stats = analyse(session, args.include_bash, args.split_numbered)
     except OSError as exc:
